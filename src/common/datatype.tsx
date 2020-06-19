@@ -16,3 +16,16 @@ export enum OpenseaDisplayType {
   BoostNumber = 'boost_number',
   Date = 'date'
 }
+
+export enum ERCStandard {
+  erc721 = 'ERC721',
+  erc1155 = 'ERC1155'
+}
+
+export enum EthTxStatus {
+  IDLE,
+  transactionHash,
+  receipt,
+  confirmation,
+  error
+}

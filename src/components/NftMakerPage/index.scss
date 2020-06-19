@@ -15,6 +15,7 @@
     justify-content: center;
     align-items: center;
     margin-bottom: 0;
+    background-color: #e9e9e9;
     .header {
       margin: 0;
     }
@@ -29,26 +30,29 @@
   }
 }
 
+.inlineFormWithBtn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  .btn {
+    margin-left: 5px;
+    align-self: flex-end;
+  }
+}
+
 .properties {
-  padding: 0.5em;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  margin-top: 10px;
+  margin-bottom: 15px;
 
   .propForm {
     margin-right: 20px;
-  }
-  .propItem {
-    display: flex;
-    flex-direction: row;
-    .btn {
-      margin-left: 5px;
-      align-self: flex-end;
-    }
+    flex: 1;
   }
 
   .metaJson {
-    margin-top: 20px;
     flex: 1;
     padding: 20px;
     font-size: 14px;
@@ -69,12 +73,15 @@
   }
 }
 
+.deployHeader {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .deploy {
   margin-top: 10px !important;
-  padding-right: 5px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
 
   .field {
     flex: 1 !important;
@@ -82,5 +89,16 @@
 }
 
 .goBtn {
+  margin-top: 15px !important;
   width: 100%;
+}
+
+.txResultBox {
+  word-break: break-all;
+  font-size: 16px;
+  text-align: center;
+
+  a {
+    color: #2185d0;
+  }
 }

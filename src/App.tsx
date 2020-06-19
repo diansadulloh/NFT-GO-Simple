@@ -4,6 +4,8 @@ import './App.scss';
 import { Switch, Route, BrowserRouter as Router, Link } from 'react-router-dom';
 import { Dropdown, Image, Menu, Button, Container, Flag } from 'semantic-ui-react';
 import NftMakerPage from './components/NftMakerPage';
+import 'react-semantic-toasts/styles/react-semantic-alert.css';
+import { SemanticToastContainer } from 'react-semantic-toasts';
 
 class App extends React.Component {
 
@@ -26,6 +28,7 @@ class App extends React.Component {
     return (
       <Router>
         <div className="App">
+          <SemanticToastContainer position="top-right" />
           <header className="App-header">
             <div className="header">
               <div className="navbar">
@@ -51,6 +54,7 @@ class App extends React.Component {
                   </Dropdown>
                   <Menu.Item as={Link} to='/gallery'>Gallery</Menu.Item>
                   <Menu.Item as={Link} to='/market'>Market</Menu.Item>
+                  <Menu.Item as={Link} to='/FAQ'>FAQ</Menu.Item>
                 </Menu>
               </div>
             </div>
@@ -68,9 +72,9 @@ class App extends React.Component {
               </Route>
               <Route path='/art-maker'></Route>
               <Route path='/gallery'></Route>
+              <Route path='/FAQ'></Route>
             </Switch>
           </Container>
-
         </div>
       </Router >
     );

@@ -157,10 +157,10 @@ export default class ImagePreview extends React.Component<IProps, IState> {
         </Card>
         <div className="info">
           <Form>
-            <Form.Input onChange={this.imageChange} label="Image Url" placeholder="https://"></Form.Input>
+            <Form.Input required onChange={this.imageChange} label="Image Url" placeholder="https://"></Form.Input>
           </Form>
           <List>
-            <p><strong>Resolution: </strong>{`${width} × ${height}`}</p>
+            <p><strong>Resolution: </strong>{`${width} × ${height} px`}</p>
             <p><strong>Size: </strong>{this.beautifyBytes(size)}</p>
             <p><strong>Host: </strong>{this.getDomain(imgUrl)}</p>
           </List>

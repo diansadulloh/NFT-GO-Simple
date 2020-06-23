@@ -1,35 +1,23 @@
-import React from 'react';
-import { Form, Button, Icon, Label, Container, Tab, Card, Modal, Popup, Input, Message } from 'semantic-ui-react';
+import React, { Fragment } from 'react';
+import { Form, Button, Icon, Label, Container, Tab, Card, Modal, Popup, Input, Message, Segment, Step, Loader } from 'semantic-ui-react';
 import { MetaDataJson, ERCStandard, EthTxStatus } from '../../common/datatype';
-import ImagePreview from './ImagePreview';
-import CreateAsset from './CreateAsset';
-import { CopyToClipboard } from 'react-copy-to-clipboard';
-import { toast } from 'react-semantic-toasts';
-import ipfs from '../../blockchain/ipfs';
+import NewContract from './NewERC721Contract';
 import Ethereum from '../../blockchain/eth';
 import { NFTGO721_ADDRESSS, NFTGO1155_ADDRESS } from '../../blockchain/config';
 import { toastSuccess, toastWarning, toastError } from '../../common/helper';
 import { TransactionReceipt } from 'web3-core';
-import storage from 'umbrella-storage';
+import CreateAsset from './CreateAsset';
+import { Route, NavLink, BrowserRouter as Router, Redirect, matchPath } from 'react-router-dom';
+import Storage from '../../common/storage';
+import eth from '../../blockchain/eth';
+import { Slider } from 'react-semantic-ui-range';
+import { css } from '@emotion/core';
+import PacmanLoader from 'react-spinners/PacmanLoader';
 
 enum DeployType {
   official,
   customized
 }
-
-const URL_PREFIX = 'ipfs://ipfs'
-
-const options = [
-  {
-    key: ERCStandard.erc721,
-    text: ERCStandard.erc721,
-    value: ERCStandard.erc721
-  }, {
-    key: ERCStandard.erc1155,
-    text: ERCStandard.erc1155,
-    value: ERCStandard.erc1155
-  }
-]
 
 interface IState {
   standard: ERCStandard;
@@ -46,8 +34,18 @@ interface IState {
   collectionName: string;
   symbol: string;
   uri: string;
+  mintNum: number;
   uploadToIpfsLoading: boolean;
-  sendTxLoading: boolean
+  uploadToIpfsComplete: boolean;
+  sendTxLoading: boolean;
+  sendTxComplete: boolean;
+  newAssetURI: string;
+  // URI Options for ERC1155 assets
+  uriOptions: string[];
+  // Selected URI for ERC1155 asset
+  selectERC1155Uri: string;
+  loadingBoxOpen: boolean;
+  errorMsg: string;
 }
 
 export default class EthNftMaker extends React.Component<any, IState> {
@@ -59,6 +57,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
     }],
     name: '',
     uri: '',
+    mintNum: 1,
     desc: '',
     image: '',
     deployType: DeployType.official,
@@ -68,26 +67,32 @@ export default class EthNftMaker extends React.Component<any, IState> {
     collectionName: '',
     symbol: '',
     uploadToIpfsLoading: false,
-    sendTxLoading: false
+    uploadToIpfsComplete: false,
+    sendTxLoading: false,
+    sendTxComplete: false,
+    newAssetURI: '',
+    uriOptions: [],
+    selectERC1155Uri: '',
+    loadingBoxOpen: false,
+    errorMsg: ''
   }
+
+  createAssetRef: any;
 
   componentWillMount() {
     this.setState({
-      customAddr: storage.getLocalStorage('customAddr') || ''
+      customAddr: Storage.get('customAddr') || ''
     })
+    this.fetchERC1155Assets();
   }
 
-  getOfficialAddress = () => {
-    const { standard } = this.state;
-    if (standard === ERCStandard.erc721) {
-      return NFTGO721_ADDRESSS;
-    } else {
-      return NFTGO1155_ADDRESS;
-    }
+  onRef = (ref) => {
+    this.createAssetRef = ref;
   }
 
-  standardChange = (e, { value }) => {
+  standardChange = (e, data) => {
     let address = '';
+    const value = data.panes[data.activeIndex].menuItem;
     if (value === ERCStandard.erc721) {
       address = NFTGO721_ADDRESSS;
     } else {
@@ -99,59 +104,13 @@ export default class EthNftMaker extends React.Component<any, IState> {
     })
   }
 
-  addProp = () => {
-    this.setState({
-      props: this.state.props.concat({ key: '', value: '' })
-    })
-  }
-
-  removeProp = (index: number) => {
-    console.log(index);
-    const { props } = this.state;
-    props.splice(index, 1);
-    this.setState({
-      props
-    })
-  }
-
-  propChange = (index: number, type: string) => {
-    return (e) => {
-      const { props } = this.state;
-      const prop = props[index];
-      if (type === 'key') {
-        prop.key = e.target.value;
-      } else {
-        prop.value = e.target.value;
-      }
-      props[index] = prop;
-      this.setState({
-        props
-      })
-    }
-  }
-
-  getMetaData = () => {
-    const { name, desc, image, props, standard } = this.state;
-    const meta: MetaDataJson = {
-      name,
-      description: desc,
-      image,
-    }
-    if (standard === ERCStandard.erc1155) {
-      meta.properties = {};
-      props.forEach(prop => {
-        meta.properties[prop.key] = prop.value;
-      })
+  getOfficialAddress = () => {
+    const { standard } = this.state;
+    if (standard === ERCStandard.erc721) {
+      return NFTGO721_ADDRESSS;
     } else {
-      meta.attributes = [];
-      props.forEach(prop => {
-        meta.attributes.push({
-          trait_type: prop.key,
-          value: prop.value
-        })
-      })
+      return NFTGO1155_ADDRESS;
     }
-    return meta;
   }
 
   inputChange = (key: string) => {
@@ -169,12 +128,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
     }
     this.setState({
       deployType: type,
-    })
-  }
-
-  updateImg = (url) => {
-    this.setState({
-      image: url
+      officialAddr: addr
     })
   }
 
@@ -192,10 +146,64 @@ export default class EthNftMaker extends React.Component<any, IState> {
     this.setState({
       customAddr: receipt.contractAddress
     })
-    storage.setLocalStorage('customAddr', receipt.contractAddress);
+    Storage.set('customAddr', receipt.contractAddress);
     return receipt;
   }
 
+  // mint ERC721 NFT
+  mintERC721 = async () => {
+    const { uri, standard, mintNum } = this.state;
+    this.setState({
+      uploadToIpfsLoading: true,
+      loadingBoxOpen: true,
+    })
+    try {
+      // upload metadata
+      const uri = await this.uploadMetadata();
+      if (uri !== '') {
+        this.setState({
+          uploadToIpfsLoading: false,
+          uploadToIpfsComplete: true,
+          sendTxLoading: true
+        })
+        let receipt: TransactionReceipt;
+        if (standard === ERCStandard.erc721) {
+          receipt = await Ethereum.mintErc721(uri, this.targetAddress(), mintNum) as TransactionReceipt;
+        }
+        toastSuccess(`Mint NFT to ${Ethereum.from} success`)
+        return receipt;
+      } else {
+        this.setState({
+          loadingBoxOpen: false
+        })
+      }
+    } catch (e) {
+      console.error(e.message);
+      if (e.code !== 4001) {
+        // cancel transaction
+        // toastError(`transaction failed: ${e.message}`);
+        this.setState({
+          errorMsg: e.message
+        })
+      } else {
+        this.setState({
+          errorMsg: 'You cancel the transaction'
+        })
+      }
+    } finally {
+      this.setState({
+        sendTxLoading: false,
+        sendTxComplete: true
+      })
+    }
+  }
+
+  targetAddress = () => {
+    const { deployType, officialAddr, customAddr } = this.state;
+    return deployType === DeployType.official ? officialAddr : customAddr;
+  }
+
+  // only erc1155 call this func
   createAsset = async () => {
     const { uri } = this.state;
     try {
@@ -205,8 +213,8 @@ export default class EthNftMaker extends React.Component<any, IState> {
       this.setState({
         sendTxLoading: true
       })
-      const receipt = await Ethereum.mintErc721(URL_PREFIX + uri, this.targetAddress()) as TransactionReceipt;
-      toastSuccess(`Mint NFT to ${Ethereum.from} success`)
+      const receipt = await eth.createErc1155Asset(uri, NFTGO1155_ADDRESS) as TransactionReceipt;
+      toastSuccess(`Create new type of NFT asset success`);
       return receipt;
     } catch (e) {
       console.error(e.message);
@@ -220,174 +228,242 @@ export default class EthNftMaker extends React.Component<any, IState> {
     }
   }
 
-  uploadToIpfs = async () => {
+  fetchERC1155Assets = async () => {
     try {
+      const uris = await eth.fetchERC1155Assets(NFTGO1155_ADDRESS);
       this.setState({
-        uploadToIpfsLoading: true
-      })
-      const meta = this.getMetaData();
-      if (meta.name === '') {
-        return toastWarning('NFT `name` is required');
-      }
-      if (meta.image === '') {
-        return toastWarning('NFT `image` is required');
-      }
-      if (meta.description === '') {
-        return toastWarning('NFT `description` is required');
-      }
-      const res = await ipfs.upload(meta);
-      this.setState({
-        uri: res.cid
+        uriOptions: uris
       })
     } catch (e) {
-      toast({
-        type: 'error',
-        title: 'ERROR',
-        description: e.message
-      })
-    } finally {
-      this.setState({
-        uploadToIpfsLoading: false
-      })
+      console.error(e.message);
     }
   }
 
-  pasteIpfs = () => {
-    toast({
-      title: 'Paste to clipboard',
+  mintERC1155 = async () => {
+
+  }
+
+  mintNumChange = (val) => {
+    this.setState({
+      mintNum: val
     })
   }
 
-  targetAddress = () => {
-    const { deployType, officialAddr, customAddr } = this.state;
-    return deployType === DeployType.official ? officialAddr : customAddr;
+  uploadMetadata = async () => {
+    return await this.createAssetRef.uploadToIpfs();
+  }
+
+  closeLoadingBox = () => {
+    this.setState({
+      loadingBoxOpen: false,
+      uploadToIpfsLoading: false,
+      sendTxLoading: false,
+      uploadToIpfsComplete: false,
+      sendTxComplete: false,
+      errorMsg: ''
+    })
   }
 
   render() {
     const {
       standard,
-      props,
       deployType,
-      uri,
-      uploadToIpfsLoading,
       sendTxLoading,
+      officialAddr,
+      mintNum,
+      uriOptions,
+      loadingBoxOpen,
+      uploadToIpfsLoading,
+      uploadToIpfsComplete,
+      sendTxComplete,
+      errorMsg
     } = this.state;
 
     const targetAddress = this.targetAddress();
-    return (
-      <div>
-        <ImagePreview updateImg={this.updateImg} />
-        <div style={{ marginTop: 20 }}>
-          <Form>
-            <Form.Group>
-              <Form.Select width="4" fluid label="STANDARD"
-                defaultValue={this.state.standard}
-                onChange={this.standardChange}
-                options={options} />
-              <Form.Input required width="16" fluid label="NFT NAME" placeholder="NFT NAME" onChange={this.inputChange('name')}></Form.Input>
-              {standard === ERCStandard.erc1155 ?
-                <Form.Input required width="10" fluid label="SYMBOL" placeholder="symbol" onChange={this.inputChange('symbol')} /> : null}
-            </Form.Group>
-            {/* <Form.Field fluid >
-              <label>URI</label>
-              <Input label={`https://metadata-api.nftgo.io/${officialAddr}`} placeholder="URI Fragment" onChange={this.inputChange('uri')} />
-            </Form.Field> */}
-            <Form.TextArea required width="16" label="Description" onChange={this.inputChange('desc')} placeholder="NFT Description" />
-            <hr />
-            <div className="properties">
-              <div className="propForm">
-                {props.map((prop, i) => (
-                  <Form.Group key={i} className="inlineFormWithBtn propItem">
-                    <Form.Input required label="key" placeholder="key" value={prop.key} onChange={this.propChange(i, 'key')}></Form.Input>
-                    <Form.Input required label="value" placeholder="value" value={prop.value} onChange={this.propChange(i, 'value')}></Form.Input>
-                    <div className="btn">
-                      <Button icon circular onClick={this.removeProp.bind(this, i)}>
-                        <Icon name="minus" />
-                      </Button>
-                    </div>
-                  </Form.Group>
-                ))}
-                <Button style={{ marginTop: 5, width: '100%' }} icon onClick={this.addProp}>
-                  {standard === ERCStandard.erc721 ? 'Attributes' : 'Properties'}
-                  <Icon name="plus" />
-                </Button>
-              </div>
-              <div className="metaJson">
-                <h3>Meta Data</h3>
-                <pre>{JSON.stringify(this.getMetaData(), null, 2)}</pre>
-              </div>
+
+    // ERC1155 panes
+    const ERC1155Panes = [
+      {
+        menuItem: 'MINT TOKEN',
+        render: () => <Fragment>
+          <Form className="assetTypes">
+            <Form.Select
+              label='ASSET TYPE'
+              fluid
+              options={uriOptions.map(opt => ({
+                key: opt,
+                text: opt,
+                value: opt
+              }))}
+              onChange={this.inputChange('selectERC1155Uri')}
+            />
+            <div className="metadata">
+              META DATA
             </div>
-            <Message info>
-              <Message.Header>Upload Metadata JSON to IPFS<Icon name="hand point down outline" /></Message.Header>
-              <Message.List items={[
-                'Make your NFT really decentralized and accessible in global.',
-                'The whole url below will be set as `URI` of your NFT.'
-              ]} />
-            </Message>
-            <Form.Field inline className="inlineFormWithBtn">
-              {uri !== '' ?
-                <CopyToClipboard text={uri} onCopy={this.pasteIpfs}>
-                  <Input style={{ flex: 1 }} label={URL_PREFIX} value={uri} readOnly />
-                </CopyToClipboard> :
-                <Input style={{ flex: 1 }} label={URL_PREFIX} value={uri} readOnly />
-              }
-              {uri !== '' ?
-                <Button style={{ marginRight: 10 }} href={'https://gateway.pinata.cloud/ipfs/' + uri} target="_blank" basic>CHECK</Button> :
-                <Button color="google plus" loading={uploadToIpfsLoading} onClick={this.uploadToIpfs}>ULOAD METADATA TO IPFS</Button>
-              }
-            </Form.Field>
           </Form>
-        </div>
-        <hr />
-        <div>
+          <hr />
+          <div>
+            <h4>MINT NUM: {mintNum}</h4>
+            <Slider settings={{
+              start: 1,
+              min: 1,
+              max: 50,
+              step: 1,
+              onChange: this.mintNumChange
+            }} />
+          </div>
+          <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC721}>NFT GO !</Button>
+        </Fragment>
+      },
+      {
+        menuItem: 'CREATE NEW ASSET',
+        render: () => <Fragment>
+          <CreateAsset onRef={this.onRef} standard={ERCStandard.erc1155} />
+          <hr />
           <Form>
-            <div className="deployHeader">
-              <Button.Group>
-                <Button secondary={deployType === DeployType.official} onClick={this.changeDeployType.bind(this, DeployType.official)}>Official Contract</Button>
-                <Button.Or />
-                <Button secondary={deployType === DeployType.customized} onClick={this.changeDeployType.bind(this, DeployType.customized)}>Customized Contract</Button>
-              </Button.Group>
-              <a style={{ fontSize: 16, marginRight: 5 }} href="https://etherscan.io" target="_blank">
-                <Icon name="code" color="grey" />
-              </a>
-            </div>
-            <Form.Group className="deploy inlineFormWithBtn">
+            <Form.Group className="deploy">
               <Form.Input
                 readOnly={deployType === DeployType.official}
                 label="CONTRACT ADDRESS"
                 placeholder="Contract Address"
-                value={targetAddress}
-                ref='txt'
+                value={officialAddr}
                 onChange={this.inputChange('customAddr')}
               />
-              <div className="btn">
-                {deployType === DeployType.customized ?
-                  <CreateAsset
-                    inputChange={this.inputChange}
-                    title="NEW CONTRACT"
-                    trigger={<Button>NEW CONTRACT</Button>}
-                    submit={this.deploy}
-                    standard={standard}
-                    onlyDeploy={standard === ERCStandard.erc1155}
-                  />
-                  : null}
-              </div>
-              {deployType === DeployType.customized && standard === ERCStandard.erc1155 ?
-                <div className="btn">
-                  <CreateAsset
-                    title="CREATE ASSET"
-                    trigger={<Button secondary>CREATE ASSET</Button>}
-                    inputChange={this.inputChange}
-                    submit={this.createAsset}
-                    standard={standard}
-                  />
-                </div>
-                : null}
             </Form.Group>
-            <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.createAsset}>NFT GO !</Button>
+            <Button size="large" style={{ width: '100%' }} secondary onClick={this.createAsset}>CREATE ASSET</Button>
           </Form>
-        </div>
-      </div >
+        </Fragment>
+      }
+    ]
+
+
+    // NFT maker tab panes
+    const panes = [
+      {
+        menuItem: {
+          as: NavLink,
+          content: 'ERC721',
+          to: '/nft-maker/erc721',
+          key: 'erc721',
+        },
+        render: () =>
+          <Tab.Pane as={Route} path="/nft-maker/erc721">
+            <Segment>
+              <CreateAsset onRef={this.onRef} standard={standard} />
+              <hr />
+              <div>
+                <Form>
+                  <div className="deployHeader">
+                    <Button.Group>
+                      <Button secondary={deployType === DeployType.official} onClick={this.changeDeployType.bind(this, DeployType.official)}>Official Contract</Button>
+                      <Button.Or />
+                      <Button secondary={deployType === DeployType.customized} onClick={this.changeDeployType.bind(this, DeployType.customized)}>Customized Contract</Button>
+                    </Button.Group>
+                    <a style={{ fontSize: 16, marginRight: 5 }} href="https://etherscan.io" target="_blank">
+                      <Icon name="code" color="grey" />
+                    </a>
+                  </div>
+                  <Form.Group className="deploy inlineFormWithBtn">
+                    <Form.Input
+                      readOnly={deployType === DeployType.official}
+                      label="CONTRACT ADDRESS"
+                      placeholder="Contract Address"
+                      value={targetAddress}
+                      ref='txt'
+                      onChange={this.inputChange('customAddr')}
+                    />
+                    <div className="btn">
+                      {deployType === DeployType.customized ?
+                        <NewContract
+                          inputChange={this.inputChange}
+                          title="NEW CONTRACT"
+                          trigger={<Button>NEW CONTRACT</Button>}
+                          submit={this.deploy}
+                        />
+                        : null}
+                    </div>
+                  </Form.Group>
+                  <div>
+                    <h4>MINT NUM: <span className="mintNum">{mintNum}</span></h4>
+                    <Slider settings={{
+                      start: 1,
+                      min: 1,
+                      max: 50,
+                      step: 1,
+                      onChange: this.mintNumChange
+                    }} />
+                  </div>
+                  <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC721}>NFT GO !</Button>
+                </Form>
+              </div>
+            </Segment>
+          </Tab.Pane>
+      },
+      {
+        menuItem: {
+          as: NavLink,
+          content: 'ERC1155',
+          to: '/nft-maker/erc1155',
+          key: 'erc1155',
+        },
+        render: () =>
+          <Tab.Pane as={Route} path="/nft-maker/erc1155">
+            <Segment>
+              <Tab menu={{ secondary: true }} panes={ERC1155Panes} />
+            </Segment>
+          </Tab.Pane>
+      }
+    ]
+
+    const defaultActiveIndex = panes.findIndex(pane => {
+      return !!matchPath(window.location.pathname, {
+        path: pane.menuItem.to,
+        exact: true
+      });
+    });
+
+    let loadingContent = '', loadingDesc = ''
+    if (uploadToIpfsLoading && !uploadToIpfsComplete) {
+      loadingContent = 'Uploading Metadata To IPFS...';
+      loadingDesc = 'Make your NFT decentralized and accessiable in global'
+    } else if (sendTxLoading && uploadToIpfsComplete) {
+      loadingContent = 'Sending Transaction...';
+      loadingDesc = 'Wait for confirmations on blockchain'
+    } else if (sendTxComplete) {
+      loadingContent = "You Got Your NFT!";
+      loadingDesc = "Thanks for using NFT to kick off your trip"
+    }
+
+    return (
+      <Router>
+        <Tab defaultActiveIndex={defaultActiveIndex} onTabChange={this.standardChange} menu={{ secondary: true }} panes={panes} />
+        <Modal size="tiny" dimmer='blurring' open={loadingBoxOpen} onClose={this.closeLoadingBox}>
+          <Modal.Content className="loadingBox" >
+            {errorMsg === '' ?
+              <Fragment>
+                {
+                  sendTxComplete ?
+                    <Icon className="symbol" name="like" style={{ marginTop: -15 }} /> :
+                    <div className="loader">
+                      <PacmanLoader
+                        size={40}
+                        loading={uploadToIpfsLoading || sendTxLoading}
+                        color='#36D7B7'
+                      />
+                    </div>
+                }
+                <div className="description">
+                  <h2>{loadingContent}</h2>
+                  {loadingDesc ?
+                    <Modal.Description>{loadingDesc}</Modal.Description> : null}
+                </div>
+              </Fragment> : <Fragment>
+                <Icon className="symbol" name="frown outline" />
+                <Message size="large" className="description" content={errorMsg} error />
+              </Fragment>}
+          </Modal.Content>
+        </Modal>
+      </Router >
     )
   }
 }

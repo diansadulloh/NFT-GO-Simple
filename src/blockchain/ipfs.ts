@@ -25,8 +25,16 @@ class IpfsUtil {
     return this;
   }
 
-  async upload(data: any): Promise<UploadResp> {
+  async uploadMeta(data: any): Promise<UploadResp> {
     return await axios.post('/v1/metadata/upload', data);
+  }
+
+  async uploadFile(fd: FormData): Promise<UploadResp> {
+    return await axios.post('/v1/file/upload', fd, {
+      headers: {
+        'Content-Type': 'multipart/form-data;charset=UTF-8'
+      }
+    })
   }
 }
 

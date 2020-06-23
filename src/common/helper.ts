@@ -1,6 +1,6 @@
 import { toast } from "react-semantic-toasts";
 
-export function toastSuccess(msg: string, duration = 3000) {
+export function toastSuccess(msg: string, duration = 4000) {
   toast({
     type: "success",
     title: 'SUCCESS',
@@ -9,7 +9,7 @@ export function toastSuccess(msg: string, duration = 3000) {
   })
 }
 
-export function toastWarning(msg: string, duration = 3000) {
+export function toastWarning(msg: string, duration = 4000) {
   toast({
     type: "warning",
     title: 'WARNING',
@@ -18,7 +18,7 @@ export function toastWarning(msg: string, duration = 3000) {
   })
 }
 
-export function toastError(msg: string, duration = 3000) {
+export function toastError(msg: string, duration = 4000) {
   toast({
     type: 'error',
     title: 'ERROR',

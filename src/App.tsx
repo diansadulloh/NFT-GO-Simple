@@ -1,7 +1,7 @@
 import React from 'react';
 import logo from './logo.svg';
 import './App.scss';
-import { Switch, Route, BrowserRouter as Router, Link } from 'react-router-dom';
+import { Switch, Route, BrowserRouter as Router, Link, Redirect } from 'react-router-dom';
 import { Dropdown, Image, Menu, Button, Container, Flag } from 'semantic-ui-react';
 import NftMakerPage from './components/NftMakerPage';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
@@ -28,7 +28,7 @@ class App extends React.Component {
     return (
       <Router>
         <div className="App">
-          <SemanticToastContainer position="top-right" />
+          <SemanticToastContainer position="top-center" />
           <header className="App-header">
             <div className="header">
               <div className="navbar">

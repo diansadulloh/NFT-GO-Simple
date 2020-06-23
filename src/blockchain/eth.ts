@@ -1,9 +1,8 @@
 import Web3 from 'web3';
 import { Contract } from 'web3-eth-contract';
-import { ERC721_CONTRACT_ABI, NFTGO721_ADDRESSS, ERC721_CONTRACT_BYTECODE } from './config';
+import { ERC721_CONTRACT_ABI, ERC721_CONTRACT_BYTECODE, ERC1155_CONTRACT_ABI } from './config';
 import { PromiEvent, TransactionReceipt } from 'web3-core';
-import { resolve } from 'dns';
-import { rejects } from 'assert';
+import Auth, { Platform } from '../common/auth';
 
 declare global {
   interface Window {
@@ -12,8 +11,6 @@ declare global {
   }
 }
 
-
-let ethUtil: EthereumUtil;
 
 class EthereumUtil {
   web3: Web3;
@@ -26,9 +23,12 @@ class EthereumUtil {
       await window.ethereum.enable();
       const accounts = await this.web3.eth.getAccounts();
       this.web3.eth.defaultAccount = accounts[0];
+      Auth.login({
+        bc: Platform.ETH,
+        address: accounts[0]
+      })
     } else {
-      alert('Metamask required');
-      return;
+      throw new Error('Metamask required');
     }
 
     return this.web3;
@@ -38,9 +38,20 @@ class EthereumUtil {
     return this.web3.eth.defaultAccount;
   }
 
+  async fetchERC1155Assets(address: string): Promise<string[]> {
+    const erc1155Contract = new this.web3.eth.Contract(ERC1155_CONTRACT_ABI as any, address, {
+      from: this.web3.eth.defaultAccount,
+      gasPrice: '30000000000'
+    });
+
+    const uris: string[][] = await erc1155Contract.methods.allUris().call();
+    return uris.map(bytes => bytes.reduce((val, curr) => {
+      return val + String.fromCharCode(this.web3.utils.hexToNumber(curr))
+    }, ''));
+  }
+
   async deployErc721(name: string, symbol: string) {
     return new Promise(async (resolve, reject) => {
-      await this.Ready();
       let newERC721 = new this.web3.eth.Contract(ERC721_CONTRACT_ABI as any);
       newERC721.deploy({
         data: ERC721_CONTRACT_BYTECODE,
@@ -60,16 +71,33 @@ class EthereumUtil {
 
   }
 
-  mintErc721(uri: string, address: string) {
+  mintErc721(uri: string, address: string, num: number) {
     return new Promise(async (resolve, reject) => {
-      await this.Ready();
       const erc721Contract = new this.web3.eth.Contract(ERC721_CONTRACT_ABI as any, address, {
         from: this.web3.eth.defaultAccount,
         gasPrice: '30000000000',
       })
-      const ev = erc721Contract.methods.mint(this.from, uri).send({
+      const ev = erc721Contract.methods.mint(this.from, uri, num).send({
         value: 0.005 * Math.pow(10, 18)
       })
+      ev.on('receipt', (receipt: TransactionReceipt) => {
+        resolve(receipt);
+      }).on('error', (err: Error) => {
+        reject(err);
+      })
+    })
+  }
+
+  createErc1155Asset(uri: string, address: string, isNF: boolean = true) {
+    return new Promise(async (resolve, reject) => {
+      const erc1155Contract = new this.web3.eth.Contract(ERC1155_CONTRACT_ABI as any, address, {
+        from: this.web3.eth.defaultAccount,
+        gasPrice: '30000000000'
+      })
+
+      const ev = erc1155Contract.methods.create(uri, isNF).send({
+        value: 0.005 * Math.pow(10, 18)
+      });
       ev.on('receipt', (receipt: TransactionReceipt) => {
         resolve(receipt);
       }).on('error', (err: Error) => {

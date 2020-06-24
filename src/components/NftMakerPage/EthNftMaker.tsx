@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { Form, Button, Icon, Label, Container, Tab, Card, Modal, Popup, Input, Message, Segment, Step, Loader } from 'semantic-ui-react';
+import { Form, Button, Icon, Label, Container, Tab, Card, Modal, Popup, Input, Message, Segment, Step, Loader, Image } from 'semantic-ui-react';
 import { MetaDataJson, ERCStandard, EthTxStatus } from '../../common/datatype';
 import NewContract from './NewERC721Contract';
 import Ethereum from '../../blockchain/eth';
@@ -42,8 +42,11 @@ interface IState {
   newAssetURI: string;
   // URI Options for ERC1155 assets
   uriOptions: string[];
+  typeOptions: number[];
   // Selected URI for ERC1155 asset
   selectERC1155Uri: string;
+  erc1155Metadata: MetaDataJson;
+  fetchErc1155MetadataLoading: boolean;
   loadingBoxOpen: boolean;
   errorMsg: string;
 }
@@ -72,9 +75,12 @@ export default class EthNftMaker extends React.Component<any, IState> {
     sendTxComplete: false,
     newAssetURI: '',
     uriOptions: [],
+    typeOptions: [],
     selectERC1155Uri: '',
+    erc1155Metadata: undefined,
     loadingBoxOpen: false,
-    errorMsg: ''
+    errorMsg: '',
+    fetchErc1155MetadataLoading: false
   }
 
   createAssetRef: any;
@@ -150,27 +156,56 @@ export default class EthNftMaker extends React.Component<any, IState> {
     return receipt;
   }
 
-  // mint ERC721 NFT
-  mintERC721 = async () => {
-    const { uri, standard, mintNum } = this.state;
+  uploadMetadataStart = () => {
     this.setState({
       uploadToIpfsLoading: true,
       loadingBoxOpen: true,
     })
+  }
+
+  sendTxStart = () => {
+    this.setState({
+      uploadToIpfsLoading: false,
+      uploadToIpfsComplete: true,
+      sendTxLoading: true
+    })
+  }
+
+  sendTxSuccess = () => {
+    this.setState({
+      sendTxLoading: false,
+      sendTxComplete: true
+    })
+  }
+
+  setErrorMsgInLoadingBox = (e) => {
+    console.error(e.message);
+    if (e.code !== 4001) {
+      // cancel transaction
+      // toastError(`transaction failed: ${e.message}`);
+      this.setState({
+        errorMsg: e.message
+      })
+    } else {
+      this.setState({
+        errorMsg: 'You cancel the transaction'
+      })
+    }
+  }
+
+  // mint ERC721 NFT
+  mintERC721 = async () => {
+    const { uri, standard, mintNum } = this.state;
+    this.uploadMetadataStart();
     try {
       // upload metadata
       const uri = await this.uploadMetadata();
       if (uri !== '') {
-        this.setState({
-          uploadToIpfsLoading: false,
-          uploadToIpfsComplete: true,
-          sendTxLoading: true
-        })
+        this.sendTxStart();
         let receipt: TransactionReceipt;
         if (standard === ERCStandard.erc721) {
           receipt = await Ethereum.mintErc721(uri, this.targetAddress(), mintNum) as TransactionReceipt;
         }
-        toastSuccess(`Mint NFT to ${Ethereum.from} success`)
         return receipt;
       } else {
         this.setState({
@@ -178,23 +213,9 @@ export default class EthNftMaker extends React.Component<any, IState> {
         })
       }
     } catch (e) {
-      console.error(e.message);
-      if (e.code !== 4001) {
-        // cancel transaction
-        // toastError(`transaction failed: ${e.message}`);
-        this.setState({
-          errorMsg: e.message
-        })
-      } else {
-        this.setState({
-          errorMsg: 'You cancel the transaction'
-        })
-      }
+      this.setErrorMsgInLoadingBox(e);
     } finally {
-      this.setState({
-        sendTxLoading: false,
-        sendTxComplete: true
-      })
+      this.sendTxSuccess();
     }
   }
 
@@ -206,41 +227,104 @@ export default class EthNftMaker extends React.Component<any, IState> {
   // only erc1155 call this func
   createAsset = async () => {
     const { uri } = this.state;
+    this.uploadMetadataStart();
     try {
-      if (uri === '') {
-        return toastWarning('URI is required. Upload metadata to IPFS first');
+      // upload metadata
+      const uri = await this.uploadMetadata();
+      if (uri !== '') {
+        this.sendTxStart();
+        const receipt = await eth.createErc1155Asset(uri, NFTGO1155_ADDRESS) as TransactionReceipt;
+        return receipt;
+      } else {
+        this.setState({
+          loadingBoxOpen: false
+        })
       }
+    } catch (e) {
+      this.setErrorMsgInLoadingBox(e);
+    } finally {
+      this.sendTxSuccess();
+    }
+  }
+
+  fetchERC1155Assets = async () => {
+    try {
+      const res = await eth.fetchERC1155Assets(NFTGO1155_ADDRESS);
+      this.setState({
+        uriOptions: res.uris,
+        typeOptions: res.types,
+        selectERC1155Uri: res.uris[0] || ''
+      }, () => {
+        if (res.uris.length !== 0) {
+          this.fetchERC1155Metadata();
+        }
+      })
+    } catch (e) {
+      console.error(e.message);
+      toastError(e.message);
+    }
+  }
+
+  onSelectURI = (e, { value }) => {
+    this.setState({
+      selectERC1155Uri: value
+    }, () => {
+      this.fetchERC1155Metadata();
+    })
+  }
+
+  getImageUrl = (ipfsUri: string) => {
+    if (!ipfsUri) return '';
+    return 'https://gateway.pinata.cloud/' + ipfsUri.replace('ipfs://', '')
+  }
+
+  // fetch metadata from IPFS gateway
+  fetchERC1155Metadata = async () => {
+    const { selectERC1155Uri } = this.state;
+    try {
+      this.setState({
+        fetchErc1155MetadataLoading: true
+      })
+      const res = await fetch(this.getImageUrl(selectERC1155Uri));
+      const metadata = await res.json();
+      this.setState({
+        erc1155Metadata: metadata
+      })
+    } catch (e) {
+      console.error(e.message);
+      toastError(e.message);
+    } finally {
+      this.setState({
+        fetchErc1155MetadataLoading: false
+      })
+    }
+  }
+
+  erc1155TabChange = (e, { activeIndex }) => {
+    if (activeIndex === 0) {
+      this.fetchERC1155Assets();
+    }
+  }
+
+  mintERC1155 = async () => {
+    const { mintNum, selectERC1155Uri, uriOptions, typeOptions } = this.state;
+    try {
       this.setState({
         sendTxLoading: true
-      })
-      const receipt = await eth.createErc1155Asset(uri, NFTGO1155_ADDRESS) as TransactionReceipt;
-      toastSuccess(`Create new type of NFT asset success`);
-      return receipt;
+      });
+      const index = uriOptions.indexOf(selectERC1155Uri);
+      await eth.mintErc1155(typeOptions[index], mintNum, NFTGO1155_ADDRESS);
+      toastSuccess(`Mint ${mintNum} NFT on ${NFTGO1155_ADDRESS} success!`);
     } catch (e) {
       console.error(e.message);
       if (e.code !== 4001) {
-        toastError(`transaction failed: ${e.message}`);
+        toastError(e.message);
       }
     } finally {
       this.setState({
         sendTxLoading: false
       })
     }
-  }
-
-  fetchERC1155Assets = async () => {
-    try {
-      const uris = await eth.fetchERC1155Assets(NFTGO1155_ADDRESS);
-      this.setState({
-        uriOptions: uris
-      })
-    } catch (e) {
-      console.error(e.message);
-    }
-  }
-
-  mintERC1155 = async () => {
-
   }
 
   mintNumChange = (val) => {
@@ -276,10 +360,23 @@ export default class EthNftMaker extends React.Component<any, IState> {
       uploadToIpfsLoading,
       uploadToIpfsComplete,
       sendTxComplete,
-      errorMsg
+      errorMsg,
+      selectERC1155Uri,
+      erc1155Metadata,
+      fetchErc1155MetadataLoading
     } = this.state;
 
     const targetAddress = this.targetAddress();
+
+    const metadataProps = [];
+    if (erc1155Metadata) {
+      for (let key in erc1155Metadata.properties) {
+        metadataProps.push({
+          key,
+          value: erc1155Metadata.properties[key]
+        })
+      }
+    }
 
     // ERC1155 panes
     const ERC1155Panes = [
@@ -295,11 +392,28 @@ export default class EthNftMaker extends React.Component<any, IState> {
                 text: opt,
                 value: opt
               }))}
-              onChange={this.inputChange('selectERC1155Uri')}
+              onChange={this.onSelectURI}
+              value={selectERC1155Uri}
             />
-            <div className="metadata">
-              META DATA
-            </div>
+
+            <Segment loading={fetchErc1155MetadataLoading} className="metadata">
+              {erc1155Metadata ? <Fragment>
+                <div className="image">
+                  <img src={this.getImageUrl(erc1155Metadata.image)} />
+                </div>
+                <div className="info">
+                  <h3>{erc1155Metadata.name}</h3>
+                  <p>{erc1155Metadata.description}</p>
+                  <div className="properties">
+                    {metadataProps.map((prop, i) =>
+                      <div className="prop" key={i}>
+                        <Label size="large" color="black">{prop.key}</Label>
+                        <Input readOnly value={prop.value} />
+                      </div>)}
+                  </div>
+                </div>
+              </Fragment> : <p className="text-center">No Data</p>}
+            </Segment>
           </Form>
           <hr />
           <div>
@@ -312,7 +426,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
               onChange: this.mintNumChange
             }} />
           </div>
-          <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC721}>NFT GO !</Button>
+          <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC1155}>NFT GO !</Button>
         </Fragment>
       },
       {
@@ -330,7 +444,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
                 onChange={this.inputChange('customAddr')}
               />
             </Form.Group>
-            <Button size="large" style={{ width: '100%' }} secondary onClick={this.createAsset}>CREATE ASSET</Button>
+            <Button disabled={selectERC1155Uri === ''} size="large" style={{ width: '100%' }} secondary onClick={this.createAsset}>CREATE ASSET</Button>
           </Form>
         </Fragment>
       }
@@ -349,7 +463,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
         render: () =>
           <Tab.Pane as={Route} path="/nft-maker/erc721">
             <Segment>
-              <CreateAsset onRef={this.onRef} standard={standard} />
+              <CreateAsset onRef={this.onRef} standard={ERCStandard.erc721} />
               <hr />
               <div>
                 <Form>
@@ -409,7 +523,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
         render: () =>
           <Tab.Pane as={Route} path="/nft-maker/erc1155">
             <Segment>
-              <Tab menu={{ secondary: true }} panes={ERC1155Panes} />
+              <Tab onTabChange={this.erc1155TabChange} menu={{ secondary: true }} panes={ERC1155Panes} />
             </Segment>
           </Tab.Pane>
       }
@@ -426,12 +540,17 @@ export default class EthNftMaker extends React.Component<any, IState> {
     if (uploadToIpfsLoading && !uploadToIpfsComplete) {
       loadingContent = 'Uploading Metadata To IPFS...';
       loadingDesc = 'Make your NFT decentralized and accessiable in global'
-    } else if (sendTxLoading && uploadToIpfsComplete) {
+    } else if (sendTxLoading) {
       loadingContent = 'Sending Transaction...';
       loadingDesc = 'Wait for confirmations on blockchain'
     } else if (sendTxComplete) {
-      loadingContent = "You Got Your NFT!";
-      loadingDesc = "Thanks for using NFT to kick off your trip"
+      if (standard === ERCStandard.erc721) {
+        loadingContent = "You Got Your NFT!";
+        loadingDesc = "Thanks for using NFTGO to kick off your trip"
+      } else {
+        loadingContent = "You Got A Brand New Asset";
+        loadingDesc = "Now go to MINT TOKENs for yourself";
+      }
     }
 
     return (

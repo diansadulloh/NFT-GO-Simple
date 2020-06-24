@@ -28,7 +28,7 @@ class App extends React.Component {
     return (
       <Router>
         <div className="App">
-          <SemanticToastContainer position="top-center" />
+          <SemanticToastContainer position="top-right" />
           <header className="App-header">
             <div className="header">
               <div className="navbar">

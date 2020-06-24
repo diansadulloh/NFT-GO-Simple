@@ -41,7 +41,6 @@ interface IState {
 
 class CreateAsset extends React.Component<IProps, IState> {
   state = {
-    standard: ERCStandard.erc721,
     props: [{
       key: 'we-love',
       value: 'satoshi'
@@ -90,7 +89,8 @@ class CreateAsset extends React.Component<IProps, IState> {
   }
 
   getMetaData = () => {
-    const { name, desc, image, props, standard } = this.state;
+    const { name, desc, image, props } = this.state;
+    const { standard } = this.props;
     const meta: MetaDataJson = {
       name,
       description: desc,

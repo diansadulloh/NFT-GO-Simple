@@ -10,6 +10,11 @@ export interface MetaDataJson {
   }>;
 }
 
+export interface Token extends MetaDataJson {
+  id: number | string;
+}
+
+
 export enum OpenseaDisplayType {
   NONE = 'empty',
   BoostPercenage = 'boost_percentage',
@@ -22,6 +27,14 @@ export enum ERCStandard {
   erc1155 = 'ERC1155'
 }
 
+export enum EOSStandard {
+  oasis = 'THE-OASIS'
+}
+
+export enum TRONStandard {
+  trc721 = 'TRC721'
+}
+
 export enum EthTxStatus {
   IDLE,
   transactionHash,
@@ -29,3 +42,5 @@ export enum EthTxStatus {
   confirmation,
   error
 }
+
+export type NFTStandard = ERCStandard;

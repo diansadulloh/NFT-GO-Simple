@@ -6,6 +6,12 @@ export interface Account {
   publicKey?: string;
 }
 
+export interface CrossChainAccount {
+  eth: Account;
+  eos: Account;
+  tron: Account;
+}
+
 const ACCOUNT_CACHE_PREFIX = 'acc_'
 
 export enum Platform {
@@ -16,11 +22,7 @@ export enum Platform {
 
 
 export default class Auth {
-  static getAuth(): {
-    eth: Account,
-    eos: Account,
-    tron: Account
-  } {
+  static getAuth(): CrossChainAccount {
     return {
       eth: Storage.get(ACCOUNT_CACHE_PREFIX + Platform.ETH),
       eos: Storage.get(ACCOUNT_CACHE_PREFIX + Platform.EOS),

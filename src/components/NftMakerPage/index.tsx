@@ -5,7 +5,7 @@ import './index.scss';
 import eth from '../../blockchain/eth';
 import { Platform } from '../../common/auth';
 import { toastError } from '../../common/helper';
-import { Switch, Route } from 'react-router-dom';
+import { Switch, Route, withRouter } from 'react-router-dom';
 import Storage from '../../common/storage';
 
 const LAST_MAKER_KEY = "last_use";
@@ -17,7 +17,7 @@ interface IState {
 }
 
 
-export default class NftMaker extends React.Component<any, IState> {
+class NftMaker extends React.Component<any, IState> {
   constructor(props: any) {
     super(props);
     this.state = {
@@ -26,10 +26,22 @@ export default class NftMaker extends React.Component<any, IState> {
     }
   }
 
+  async componentWillUpdate() {
+    this.redirect();
+  }
+
   async componentWillMount() {
+    this.redirect();
+  }
+
+  redirect() {
+    const { history } = this.props;
     const bc = Storage.get(LAST_MAKER_KEY);
     if (bc === Platform.ETH) {
-      await eth.Ready();
+      console.log(history.location.pathname)
+      if (history.location.pathname === '/nft-maker') {
+        history.replace("/nft-maker/erc721");
+      }
     }
   }
 
@@ -49,6 +61,7 @@ export default class NftMaker extends React.Component<any, IState> {
       lastUse: bc
     })
     Storage.set(LAST_MAKER_KEY, bc);
+    this.redirect();
   }
 
   clearLastUse = () => {
@@ -141,3 +154,5 @@ export default class NftMaker extends React.Component<any, IState> {
     )
   }
 }
+
+export default withRouter(NftMaker);

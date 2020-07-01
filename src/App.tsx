@@ -4,6 +4,7 @@ import './App.scss';
 import { Switch, Route, BrowserRouter as Router, Link, Redirect } from 'react-router-dom';
 import { Dropdown, Image, Menu, Button, Container, Flag } from 'semantic-ui-react';
 import NftMakerPage from './components/NftMakerPage';
+import Gallery from './components/Gallery'
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import { SemanticToastContainer } from 'react-semantic-toasts';
 
@@ -71,7 +72,9 @@ class App extends React.Component {
                 <NftMakerPage />
               </Route>
               <Route path='/art-maker'></Route>
-              <Route path='/gallery'></Route>
+              <Route path='/gallery'>
+                <Gallery />
+              </Route>
               <Route path='/FAQ'></Route>
             </Switch>
           </Container>

@@ -12,10 +12,11 @@ interface IState {
   imgLoading: boolean;
   tmpPath: string;
   tmpFile: File;
+  type: string;
 }
 
 interface IProps {
-  updateImg: (url) => void
+  onRef: (ref) => void;
 }
 
 export default class ImagePreview extends React.Component<IProps, IState> {
@@ -26,9 +27,9 @@ export default class ImagePreview extends React.Component<IProps, IState> {
     size: 0,
     imgLoading: false,
     tmpPath: '',
-    tmpFile: undefined
+    tmpFile: undefined,
+    type: ''
   };
-
 
   imageRef: RefObject<HTMLImageElement>;
   fileRef: any;
@@ -39,6 +40,10 @@ export default class ImagePreview extends React.Component<IProps, IState> {
 
     this.imageRef = React.createRef();
     this.fileRef = React.createRef();
+  }
+
+  componentDidMount() {
+    this.props.onRef(this);
   }
 
   setImageRef = e => {
@@ -136,11 +141,13 @@ export default class ImagePreview extends React.Component<IProps, IState> {
     reader.readAsDataURL(file);
     reader.onload = (e) => {
       const url = e.target.result as string;
+      const ind = file.name.lastIndexOf('.');
       this.getImageInfo(url)
       this.setState({
         imgUrl: '',
         tmpPath: url,
         size: file.size,
+        type: file.name.substring(ind + 1)
       })
     }
     this.setState({
@@ -148,13 +155,15 @@ export default class ImagePreview extends React.Component<IProps, IState> {
     })
   }
 
-  submitUpload = async () => {
+  submitUpload = async (): Promise<string> => {
     const { tmpFile } = this.state;
     if (!tmpFile) {
-      return toastWarning('please attach your image first');
+      toastWarning('please attach your image first');
+      return ''
     }
     if (tmpFile.size > 2 * 1024 * 1024) {
-      return toastWarning('Image size should be lower than 2 MB');
+      toastWarning('Image size should be lower than 2 MB');
+      return ''
     }
 
     try {
@@ -168,8 +177,7 @@ export default class ImagePreview extends React.Component<IProps, IState> {
       this.setState({
         imgUrl: res.cid
       })
-      this.props.updateImg(newUrl);
-      toastSuccess('upload success')
+      return newUrl
     } catch (e) {
       toastError(e.message);
     } finally {
@@ -180,7 +188,7 @@ export default class ImagePreview extends React.Component<IProps, IState> {
   }
 
   render() {
-    const { imgUrl, tmpPath, width, height, size, imgLoading } = this.state;
+    const { imgUrl, tmpPath, width, height, size, type } = this.state;
     return (
       <div className="imagePreview">
         <Card className="preview" onClick={() => this.fileRef.current.click()}>
@@ -188,11 +196,9 @@ export default class ImagePreview extends React.Component<IProps, IState> {
             <Image src={tmpPath} ref={this.setImageRef} /> :
             <Header icon>
               <Icon color="grey" name="picture" />
-              <span className="holderText" >Upload Image or Paste an URL</span>
+              <span className="holderText" >Upload Image You Like</span>
             </Header>
           }
-          {imgLoading ?
-            <Loader active /> : null}
           <input
             ref={this.fileRef}
             type="file"
@@ -203,26 +209,11 @@ export default class ImagePreview extends React.Component<IProps, IState> {
         </Card>
         <div className="info">
           <List>
-            <Input
-              style={{ marginBottom: 10 }}
-              fluid
-              label='ipfs://ipfs/'
-              value={imgUrl}
-              readOnly
-              action={{
-                icon: 'eye',
-                as: 'a',
-                href: 'https://gateway.pinata.cloud/ipfs/' + imgUrl,
-                disabled: imgUrl === '',
-                target: '_blank'
-              }}
-            />
             <p><strong>Size: </strong>{`${width} × ${height}`}</p>
             <p><strong>Bytes: </strong>{this.beautifyBytes(size)}</p>
-            <p><strong>Host: </strong>{this.getDomain(imgUrl)}</p>
+            <p><strong>Type: </strong>{type.toUpperCase()}</p>
+            <p className="sub-text">Support: JPG, JPEG, PNG, GIF, SVG</p>
           </List>
-          {tmpPath && !imgUrl ?
-            <Button color="google plus" onClick={this.submitUpload} disabled={imgLoading}>UPLOAD</Button> : null}
         </div>
       </div>
     )

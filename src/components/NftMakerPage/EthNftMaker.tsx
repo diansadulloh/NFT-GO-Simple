@@ -1,17 +1,16 @@
 import React, { Fragment } from 'react';
 import { Form, Button, Icon, Label, Container, Tab, Card, Modal, Popup, Input, Message, Segment, Step, Loader, Image } from 'semantic-ui-react';
-import { MetaDataJson, ERCStandard, EthTxStatus } from '../../common/datatype';
+import { MetaDataJson, ERCStandard, EthTxStatus, NFTStandard } from '../../common/datatype';
 import NewContract from './NewERC721Contract';
 import Ethereum from '../../blockchain/eth';
-import { NFTGO721_ADDRESSS, NFTGO1155_ADDRESS } from '../../blockchain/config';
+import { NFTGO721_ADDRESSS, NFTGO1155_ADDRESS, IPFS_GATEWAY } from '../../blockchain/config';
 import { toastSuccess, toastWarning, toastError } from '../../common/helper';
 import { TransactionReceipt } from 'web3-core';
 import CreateAsset from './CreateAsset';
-import { Route, NavLink, BrowserRouter as Router, Redirect, matchPath } from 'react-router-dom';
+import { Route, NavLink, BrowserRouter as Router, Redirect, matchPath, withRouter } from 'react-router-dom';
 import Storage from '../../common/storage';
 import eth from '../../blockchain/eth';
 import { Slider } from 'react-semantic-ui-range';
-import { css } from '@emotion/core';
 import PacmanLoader from 'react-spinners/PacmanLoader';
 
 enum DeployType {
@@ -20,7 +19,7 @@ enum DeployType {
 }
 
 interface IState {
-  standard: ERCStandard;
+  standard: NFTStandard;
   name: string;
   desc: string;
   image: string;
@@ -49,9 +48,11 @@ interface IState {
   fetchErc1155MetadataLoading: boolean;
   loadingBoxOpen: boolean;
   errorMsg: string;
+  erc721MintFee: number;
+  erc1155CreateFee: number;
 }
 
-export default class EthNftMaker extends React.Component<any, IState> {
+class EthNftMaker extends React.Component<any, IState> {
   state = {
     standard: ERCStandard.erc721,
     props: [{
@@ -80,16 +81,31 @@ export default class EthNftMaker extends React.Component<any, IState> {
     erc1155Metadata: undefined,
     loadingBoxOpen: false,
     errorMsg: '',
-    fetchErc1155MetadataLoading: false
+    fetchErc1155MetadataLoading: false,
+    erc721MintFee: 0,
+    erc1155CreateFee: 0
   }
 
   createAssetRef: any;
 
-  componentWillMount() {
+  async componentWillMount() {
     this.setState({
-      customAddr: Storage.get('customAddr') || ''
+      customAddr: Storage.get('customAddr') || '',
     })
     this.fetchERC1155Assets();
+    this.fetchCurrentFee();
+  }
+
+  fetchCurrentFee = async () => {
+    const fees = await Promise.all([
+      eth.fetchERC721MintFee(NFTGO721_ADDRESSS),
+      eth.fetchERC1155CreateFee(NFTGO1155_ADDRESS)
+    ])
+    console.log(fees);
+    this.setState({
+      erc721MintFee: fees[0],
+      erc1155CreateFee: fees[1]
+    })
   }
 
   onRef = (ref) => {
@@ -98,7 +114,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
 
   standardChange = (e, data) => {
     let address = '';
-    const value = data.panes[data.activeIndex].menuItem;
+    const value = data.panes[data.activeIndex].menuItem.key;
     if (value === ERCStandard.erc721) {
       address = NFTGO721_ADDRESSS;
     } else {
@@ -195,7 +211,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
 
   // mint ERC721 NFT
   mintERC721 = async () => {
-    const { uri, standard, mintNum } = this.state;
+    const { standard, mintNum } = this.state;
     this.uploadMetadataStart();
     try {
       // upload metadata
@@ -275,7 +291,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
 
   getImageUrl = (ipfsUri: string) => {
     if (!ipfsUri) return '';
-    return 'https://gateway.pinata.cloud/' + ipfsUri.replace('ipfs://', '')
+    return IPFS_GATEWAY + ipfsUri.replace('ipfs://', '')
   }
 
   // fetch metadata from IPFS gateway
@@ -363,7 +379,9 @@ export default class EthNftMaker extends React.Component<any, IState> {
       errorMsg,
       selectERC1155Uri,
       erc1155Metadata,
-      fetchErc1155MetadataLoading
+      fetchErc1155MetadataLoading,
+      erc721MintFee,
+      erc1155CreateFee
     } = this.state;
 
     const targetAddress = this.targetAddress();
@@ -426,6 +444,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
               onChange: this.mintNumChange
             }} />
           </div>
+
           <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC1155}>NFT GO !</Button>
         </Fragment>
       },
@@ -444,7 +463,11 @@ export default class EthNftMaker extends React.Component<any, IState> {
                 onChange={this.inputChange('customAddr')}
               />
             </Form.Group>
-            <Button disabled={selectERC1155Uri === ''} size="large" style={{ width: '100%' }} secondary onClick={this.createAsset}>CREATE ASSET</Button>
+            <div className="totalFee">
+              <h4>CREATE FEE:</h4>
+              <span className="value">{erc1155CreateFee.toFixed(3) || 0} <i className="iconfont icon-ethereum1 bc-logo" /></span>
+            </div>
+            <Button className="goBtn" size="large" style={{ width: '100%' }} secondary onClick={this.createAsset}>CREATE ASSET</Button>
           </Form>
         </Fragment>
       }
@@ -507,6 +530,10 @@ export default class EthNftMaker extends React.Component<any, IState> {
                       onChange: this.mintNumChange
                     }} />
                   </div>
+                  <div className="totalFee">
+                    <h4>MINT FEE:</h4>
+                    <span className="value">{(erc721MintFee * mintNum).toFixed(3) || 0} <i className="iconfont icon-ethereum1 bc-logo" /></span>
+                  </div>
                   <Button loading={sendTxLoading} primary className="goBtn" size="big" onClick={this.mintERC721}>NFT GO !</Button>
                 </Form>
               </div>
@@ -538,7 +565,7 @@ export default class EthNftMaker extends React.Component<any, IState> {
 
     let loadingContent = '', loadingDesc = ''
     if (uploadToIpfsLoading && !uploadToIpfsComplete) {
-      loadingContent = 'Uploading Metadata To IPFS...';
+      loadingContent = 'Uploading Info To IPFS...';
       loadingDesc = 'Make your NFT decentralized and accessiable in global'
     } else if (sendTxLoading) {
       loadingContent = 'Sending Transaction...';
@@ -586,3 +613,5 @@ export default class EthNftMaker extends React.Component<any, IState> {
     )
   }
 }
+
+export default withRouter(EthNftMaker);

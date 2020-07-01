@@ -53,6 +53,8 @@ class CreateAsset extends React.Component<IProps, IState> {
     symbol: '',
   }
 
+  imageRef: any;
+
   componentDidMount() {
     this.props.onRef(this);
   }
@@ -122,10 +124,9 @@ class CreateAsset extends React.Component<IProps, IState> {
     }
   }
 
-  updateImg = (url) => {
-    this.setState({
-      image: url
-    })
+
+  uploadImage = async (): Promise<string> => {
+    return this.imageRef.submitUpload();
   }
 
   uploadToIpfs = async (): Promise<string> => {
@@ -134,16 +135,21 @@ class CreateAsset extends React.Component<IProps, IState> {
       toastWarning('NFT `name` is required');
       return ''
     }
-    if (meta.image === '') {
-      toastWarning('NFT `image` is required');
-      return ''
-    }
     if (meta.description === '') {
       toastWarning('NFT `description` is required');
       return ''
     }
+    const image = await this.uploadImage();
+    meta.image = image || '';
+    if (meta.image === '') {
+      return ''
+    }
     const res = await ipfs.uploadMeta(meta);
     return URL_PREFIX + res.cid
+  }
+
+  onRef = (ref) => {
+    this.imageRef = ref;
   }
 
   pasteIpfs = () => {
@@ -161,7 +167,7 @@ class CreateAsset extends React.Component<IProps, IState> {
 
     return (
       <div>
-        <ImagePreview updateImg={this.updateImg} />
+        <ImagePreview onRef={this.onRef} />
         <div style={{ marginTop: 20 }}>
           <Form>
             <Form.Group>
@@ -187,35 +193,7 @@ class CreateAsset extends React.Component<IProps, IState> {
                   <Icon name="plus" />
                 </Button>
               </div>
-              {/* <div className="metadata">
-                <h3>{standard === ERCStandard.erc721 ? 'Attributes' : 'Properties'}</h3>
-                <List divided>
-                  {props.map(prop => <List.Item>
-                    <Label size="medium" color="black">{prop.key}</Label>
-                    <span>{prop.value}</span>
-                  </List.Item>)}
-                </List>
-              </div> */}
             </div>
-            {/* <Message info>
-              <Message.Header>Upload Metadata JSON to IPFS<Icon name="hand point down outline" /></Message.Header>
-              <Message.List items={[
-                'Make your NFT really decentralized and accessible in global.',
-                'The whole url below will be set as `URI` of your NFT.'
-              ]} />
-            </Message> */}
-            {/* <Form.Field inline className="inlineFormWithBtn">
-              {uri !== '' ?
-                <CopyToClipboard text={uri} onCopy={this.pasteIpfs}>
-                  <Input style={{ flex: 1 }} label={URL_PREFIX} value={uri} readOnly />
-                </CopyToClipboard> :
-                <Input style={{ flex: 1 }} label={URL_PREFIX} value={uri} readOnly />
-              }
-              {uri !== '' ?
-                <Button style={{ marginRight: 10 }} href={'https://gateway.pinata.cloud/ipfs/' + uri} target="_blank" basic>CHECK</Button> :
-                <Button color="google plus" loading={uploadToIpfsLoading} onClick={this.uploadToIpfs}>ULOAD METADATA TO IPFS</Button>
-              }
-            </Form.Field> */}
           </Form>
         </div>
       </div >
